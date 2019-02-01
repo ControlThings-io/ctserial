@@ -22,10 +22,10 @@ from tabulate import tabulate
 
 class CtSerial(Ctui):
     """Commands that users may use at the application prompt."""
-    name = 'ctmodbus'
+    name = 'ctserial'
     version = '0.5'
-    description = 'a security professional\'s swiss army knife for interacting with Modbus devices'
-    prompt = 'ctmodbus> '
+    description = 'a security professional\'s swiss army knife for interacting with serial devices'
+    prompt = 'ctserial> '
     session = None
     unit_id = 1
     statusbar = 'Session:{}'.format(session)
