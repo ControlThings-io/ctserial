@@ -4,12 +4,10 @@ ctserial goal is to become the security professional's Swiss army knife for inte
 
 # Installation:
 
-As long as you have git and Python 3.5 or later installed, all you should need to do is:
+As long as you have git and Python 3.6 or later installed, all you should need to do is:
 
 ```
-git clone https://github.com/ControlThingsTools/ctserial.git
-cd ctserial
-pip3 install -r requirements.txt
+pip3 install ctserial
 ```
 
 # Usage:
@@ -27,16 +25,9 @@ ctmodbus> exit
 
 # Platform Independence
 
-Python 3.5+ and all dependencies are available for all major operating systems.  It is primarily developed on MacOS and Linux, but should work in Windows as well.
+Python 3.6+ and all dependencies are available for all major operating systems.  It is primarily developed on MacOS and Linux, but should work in Windows as well.
 
 # Author
 
 * Justin Searle <justin@controlthings.io>
 
-Based on the excellent work of Philipp Klaus <philipp.l.klaus@web.de> which can be found at:
-
-* (https://github.com/pklaus/jpnevulator.py)
-
-Which in turn was a python implementation of:
-
-* [jpnevulator](http://jpnevulator.snarl.nl/)

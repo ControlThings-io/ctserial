@@ -4,4 +4,6 @@ __pycache__/
 .mypy_cache/
 src/ctserial/__pycache__/
 dist/
+build/
+.venv/
 ctserial.egg-info/

@@ -22,10 +22,11 @@ def read(*names, **kwargs):
 
 setup(
     name='ctserial',
-    version='0.3',
+    version='0.3.1',
     license='GPLv3',
     description='ctserial is a security professional\'s swiss army knife for interacting with raw serial devices',
     long_description=open('README.md').read(),
+    long_description_content_type="text/markdown",
     author='Justin Searle',
     author_email='justin@meeas.com',
     url='https://github.com/ControlThingsTools/ctserial',
@@ -46,16 +47,13 @@ setup(
         'Operating System :: Unix',
         'Operating System :: POSIX',
         'Operating System :: Microsoft :: Windows',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: Implementation :: CPython',
-        'Programming Language :: Python :: Implementation :: PyPy',
+        'Programming Language :: Python :: 3',
         'Topic :: Utilities',
     ],
     keywords=[
-        'serial', 'pentest', 'ControlThingsTools', 'ControlThingsPlatform',
+        'serial', 'pentest', 'ControlThings', 'ControlThingsPlatform',
     ],
+    python_requires='>=3.6',
     install_requires=[
         'ctui',
         'pyserial',
