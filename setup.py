@@ -22,7 +22,7 @@ def read(*names, **kwargs):
 
 setup(
     name='ctserial',
-    version='0.3.1',
+    version=open('VERSION').read(),
     license='GPLv3',
     description='ctserial is a security professional\'s swiss army knife for interacting with raw serial devices',
     long_description=open('README.md').read(),
