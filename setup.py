@@ -53,7 +53,7 @@ setup(
     keywords=[
         'serial', 'pentest', 'ControlThings', 'ControlThingsPlatform',
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.6,<4',
     install_requires=[
         'ctui',
         'pyserial',
