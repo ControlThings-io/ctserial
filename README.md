@@ -15,12 +15,12 @@ pip3 install ctserial
 First, start the tool from a terminal.  Then connect to your serial device and interact with it.  For example:
 
 ```
-ctmodbus> connect /dev/your-serial-device
-ctmodbus> sendhex deadc0de        (sends actual hex, so 4 bytes)
-ctmodbus> sendhex \xde \xad c0de  (sends same hex as before, ignoring spaces and \x)
-ctmondus> send Dead Code 国        (sends full utf-8 string without spaces)
-ctmodbus> send "Dead Code 国"      (Use quotes if you need spaces)
-ctmodbus> exit
+ctserial> connect /dev/your-serial-device
+ctserial> sendhex deadc0de        (sends actual hex, so 4 bytes)
+ctserial> sendhex \xde \xad c0de  (sends same hex as before, ignoring spaces and \x)
+ctserial> send Dead Code 国        (sends full utf-8 string without spaces)
+ctserial> send "Dead Code 国"      (Use quotes if you need spaces)
+ctserial> exit
 ```
 
 # Platform Independence
