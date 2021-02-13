@@ -55,7 +55,7 @@ setup(
     ],
     python_requires='>=3.6,<4',
     install_requires=[
-        'ctui',
+        'ctui==0.7.*',
         'pyserial',
         'tabulate'
     ],
