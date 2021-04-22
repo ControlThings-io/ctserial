@@ -33,7 +33,7 @@ black = "^20.8b1"
 isort = "^5.7.0"
 
 [tool.poetry.scripts]
-ctmodbus = "ctmodbus.commands:main"
+ctserial = "ctserial.commands:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
