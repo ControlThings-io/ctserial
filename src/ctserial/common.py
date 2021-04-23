@@ -12,10 +12,9 @@
 """
 
 import operator
-import re
-import shlex
-import socket
 import time
+import unicodedata
+from textwrap import wrap
 
 from ctui.dialogs import message_dialog
 from serial.tools.list_ports import comports
@@ -83,3 +82,54 @@ def format_output(raw_bytes, prefix="", output_format="utf-8"):
         utf8_str_out = [" " * len(prefix)] + list(utf8)
         table = [utf8_hex_out, utf8_str_out]
     return tabulate(table, tablefmt="plain", stralign="right")
+
+
+# def bytes2hexstr(raw_bytes, count=0, sep=" ", length=len(raw_bytes)):
+#     hexstr = raw_bytes.hex()
+#     lines = []
+#     for i in range(0, len(hexstr), length):
+#         line = hexstr[i : i + length]
+#         lines.append(sep.join(line[i : i + count] for i in range(0, len(line), count)))
+#         if i + length < len(hexstr):
+#             lines.append("\n")
+#     return "".join(lines)
+
+
+def bytes2hexstr(raw_bytes, group=0, sep=" ", line=0):
+    hexstr = raw_bytes.hex()
+    if group:
+        hexstr = sep.join(hexstr[i : i + group] for i in range(0, len(hexstr), group))
+    if line:
+        hexstr = "\n".join(wrap(hexstr, line))
+    return hexstr
+
+
+def replace_control_characters(string):
+    safe_string = []
+    for char in string:
+        if unicodedata.category(char)[0] != "C":
+            safe_string.append(char)
+        else:
+            safe_string.append("\ufffd")
+    return "".join(safe_string)
+
+
+def bytes2ascii(raw_bytes):
+    ascii = raw_bytes.decode("ascii", "replace")
+    safe_ascii = replace_control_characters(ascii)
+    return safe_ascii
+
+
+def bytes2utf8(raw_bytes):
+    utf8 = raw_bytes.decode("utf-8", "replace")
+    safe_utf8 = replace_control_characters(utf8)
+    return safe_utf8
+
+
+def bytes_decode(raw_bytes):
+    ascii = bytes2ascii(raw_bytes)
+    utf8 = bytes2utf8(raw_bytes)
+    if ascii == utf8:
+        return f"ASCII: {ascii}"
+    else:
+        return f"ASCII: {ascii}\nUTF-8: {utf8}"

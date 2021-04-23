@@ -41,10 +41,11 @@ ctserial.session = None
 # ctserial.statusbar = f"Session:{ctserial.session.port}"
 ctserial.output_format = "mixed"
 ctserial.macros = {}
+ctserial.views = {"transactions": [["DIR", "RAW HEX", "DECODES"]]}
 
 
 @ctserial.command
-def do_connect(device: str = "/dev/null/", baudrate: int = 9600, parity=PARITY_NONE):
+def do_connect(device: str = "/dev/null/", baudrate: int = 9600, parity: str = "none"):
     """
     Connect to a serial device
 
@@ -75,11 +76,8 @@ def do_connect(device: str = "/dev/null/", baudrate: int = 9600, parity=PARITY_N
     )
     assert s.isOpen(), f"Could not connect to {valid_device}"
     ctserial.session = s
-    date, time = str(datetime.today()).split()
-    return (
-        ctserial.output_text
-        + f"{date} {time} - ASCII session OPENED with {valid_device}\n"
-    )
+    message_dialog("SUCCESS", f"ASCII session OPENED with {valid_device}")
+    return
 
 
 @ctserial.command
@@ -90,13 +88,11 @@ def do_close():
     assert (
         ctserial.session
     ), "There is not an open session.  Connect to one first."  # ToDo assert session type
+    dev = ctserial.session.port
     ctserial.session.close()
     ctserial.session = None
-    date, time = str(datetime.today()).split()
-    return (
-        ctserial.output_text
-        + f"{date} {time} - Session with {ctserial.session.port} CLOSED\n"
-    )
+    message_dialog("SUCCESS", f"Session with {dev} CLOSED")
+    return
 
 
 @ctserial.command
@@ -116,13 +112,32 @@ def do_send_hex(data: str):
     ), "There is not an open session.  Connect to one first."  # ToDo assert session type
     raw_hex = data.lower().replace("0x", "").replace("\\x", "").replace(" ", "")
     assert re.match("^[0123456789abcdef]+$", raw_hex), "Only hex characters allowed"
-    assert len(raw_hex) % 2 != 0, "You must send an even number of hex characters"
+    # assert len(raw_hex) % 2 != 0, "You must send an even number of hex characters"
     tx_bytes = bytes.fromhex(raw_hex)
+    ctserial.views["transactions"].append(
+        [
+            "-->",
+            common.bytes2hexstr(tx_bytes, group=8, sep=" ", line=35),
+            common.bytes_decode(tx_bytes),
+        ]
+    )
     rx_bytes = common.send_instruction(ctserial.session, tx_bytes)
-    output_text = ctserial.output_text
-    output_text += common.format_output(tx_bytes, "--> ", ctserial.output_format) + "\n"
-    output_text += common.format_output(rx_bytes, "<-- ", ctserial.output_format) + "\n"
-    return output_text
+    if rx_bytes:
+        ctserial.views["transactions"].append(
+            [
+                "<--",
+                common.bytes2hexstr(rx_bytes, group=8, sep=" ", line=35),
+                common.bytes_decode(rx_bytes),
+            ]
+        )
+    else:
+        message_dialog("ERROR", "No response received")
+    # output_text = ctserial.output_text
+    # output_text += common.format_output(tx_bytes, "--> ", ctserial.output_format) + "\n"
+    # output_text += common.format_output(rx_bytes, "<-- ", ctserial.output_format) + "\n"
+    return tabulate(
+        ctserial.views["transactions"], tablefmt="plain", headers="firstrow"
+    )
 
 
 @ctserial.command
@@ -146,6 +161,8 @@ def do_send_utf8(data: str):
 
 def main():
     ctserial.run()
+    if ctserial.session:
+        ctserial.session.close()
 
 
 if __name__ == "__main__":
