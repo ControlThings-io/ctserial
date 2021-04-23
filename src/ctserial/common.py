@@ -64,37 +64,6 @@ def send_instruction(session, tx_bytes):
     return rx_raw
 
 
-def format_output(raw_bytes, prefix="", output_format="utf-8"):
-    """ Return hex and utf-8 decodes aligned on two lines """
-    if len(raw_bytes) == 0:
-        return prefix + "None"
-    table = []
-    if output_format == "hex" or output_format == "mixed":
-        hex_out = [prefix] + list(bytes([x]).hex() for x in raw_bytes)
-        table.append(hex_out)
-    if output_format == "ascii" or output_format == "mixed":
-        ascii_out = [" " * len(prefix)] + list(raw_bytes.decode("ascii", "replace"))
-        table.append(ascii_out)
-    if output_format == "utf-8":
-        # TODO: track \xefbfdb and replace with actual sent character
-        utf8 = raw_bytes.decode("utf-8", "replace")
-        utf8_hex_out = [prefix] + list(x.encode("utf-8").hex() for x in utf8)
-        utf8_str_out = [" " * len(prefix)] + list(utf8)
-        table = [utf8_hex_out, utf8_str_out]
-    return tabulate(table, tablefmt="plain", stralign="right")
-
-
-# def bytes2hexstr(raw_bytes, count=0, sep=" ", length=len(raw_bytes)):
-#     hexstr = raw_bytes.hex()
-#     lines = []
-#     for i in range(0, len(hexstr), length):
-#         line = hexstr[i : i + length]
-#         lines.append(sep.join(line[i : i + count] for i in range(0, len(line), count)))
-#         if i + length < len(hexstr):
-#             lines.append("\n")
-#     return "".join(lines)
-
-
 def bytes2hexstr(raw_bytes, group=0, sep=" ", line=0):
     hexstr = raw_bytes.hex()
     if group:

@@ -11,7 +11,6 @@
 
 import re
 import shlex
-from datetime import datetime
 
 from ctui import Ctui
 from ctui.dialogs import message_dialog
@@ -132,9 +131,6 @@ def do_send_hex(data: str):
         )
     else:
         message_dialog("ERROR", "No response received")
-    # output_text = ctserial.output_text
-    # output_text += common.format_output(tx_bytes, "--> ", ctserial.output_format) + "\n"
-    # output_text += common.format_output(rx_bytes, "<-- ", ctserial.output_format) + "\n"
     return tabulate(
         ctserial.views["transactions"], tablefmt="plain", headers="firstrow"
     )
@@ -152,11 +148,27 @@ def do_send_utf8(data: str):
     ), "There is not an open session.  Connect to one first."  # ToDo assert session type
     utf8_str = "".join(shlex.split(data))  # remove spaces not in quotes and format
     tx_bytes = bytes(utf8_str, encoding="utf-8")
+    ctserial.views["transactions"].append(
+        [
+            "-->",
+            common.bytes2hexstr(tx_bytes, group=8, sep=" ", line=35),
+            common.bytes_decode(tx_bytes),
+        ]
+    )
     rx_bytes = common.send_instruction(ctserial.session, tx_bytes)
-    output_text = ctserial.output_text
-    output_text += common.format_output(tx_bytes, "--> ", ctserial.output_format) + "\n"
-    output_text += common.format_output(rx_bytes, "<-- ", ctserial.output_format) + "\n"
-    return output_text
+    if rx_bytes:
+        ctserial.views["transactions"].append(
+            [
+                "<--",
+                common.bytes2hexstr(rx_bytes, group=8, sep=" ", line=35),
+                common.bytes_decode(rx_bytes),
+            ]
+        )
+    else:
+        message_dialog("ERROR", "No response received")
+    return tabulate(
+        ctserial.views["transactions"], tablefmt="plain", headers="firstrow"
+    )
 
 
 def main():
