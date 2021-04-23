@@ -16,12 +16,13 @@ First, start the tool from a terminal.  Then connect to your serial device and i
 
 ```
 ctserial> connect /dev/your-serial-device
-ctserial> sendhex deadc0de        (sends actual hex, so 4 bytes)
-ctserial> sendhex de ad c0de      (sends same hex as before, ignoring any non-hex character)
+ctserial> send hex deadc0de        (sends actual hex, so 4 bytes)
 ctserial> send Dead Code 国        (sends full utf-8 string without spaces)
 ctserial> send "Dead Code 国"      (Use quotes if you need spaces)
 ctserial> exit
 ```
+
+NOTE: The v0.4.0 temporarily removed non-hex character cleaning from `send hex` hexstring, so you can not currently use spaces in the hex string.  This will be restored in the near future, but I had to push out v0.4.0 a bit fast to replace a broken v0.3.2 which got out of sync with the ctui library it depended on.
 
 # Platform Independence
 
