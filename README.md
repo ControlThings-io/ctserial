@@ -1,4 +1,4 @@
-# Control Things Serial
+# ControlThings Serial
 
 A highly flexible serial interface tool made for penetration testers.
 
