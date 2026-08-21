@@ -4,25 +4,35 @@ A highly flexible serial interface tool made for penetration testers.
 
 # Installation:
 
-As long as you have git and Python 3.6 or later installed, all you should need to do is:
+As long as you have git and Python 3.8 or later installed, all you should need to do is:
 
-```
+```bash
 pip3 install ctserial
+```
+
+Or better yet, if you have `uv` installed, install it in an isolated environment with:
+
+```bash
+uv tool install ctserial
+```
+
+`uv` also lets you try the tool out without installing it by running:
+
+```bash
+uvx ctserial
 ```
 
 # Usage:
 
 First, start the tool from a terminal.  Then connect to your serial device and interact with it.  For example:
 
-```
+```bash
 ctserial> connect /dev/your-serial-device
-ctserial> send hex deadc0de        (sends actual hex, so 4 bytes)
-ctserial> send Dead Code 国        (sends full utf-8 string without spaces)
-ctserial> send "Dead Code 国"      (Use quotes if you need spaces)
+ctserial> send hex deadc0de                   # sends actual hex, so 4 bytes
+ctserial> send Dead Code 国                    # sends full utf-8 string without spaces
+ctserial> send "Dead Code 国"                  # Use quotes if you need spaces
 ctserial> exit
 ```
-
-NOTE: The v0.4.0 temporarily removed non-hex character cleaning from `send hex` hexstring, so you can not currently use spaces in the hex string.  This will be restored in the near future, but I had to push out v0.4.0 a bit fast to replace a broken v0.3.2 which got out of sync with the ctui library it depended on.
 
 # Platform Independence
 
