@@ -11,10 +11,10 @@
 
 import re
 import shlex
+from importlib.metadata import version
 
 from ctui import Ctui
 from ctui.dialogs import message_dialog
-from pkg_resources import get_distribution
 from serial import (
     EIGHTBITS,
     PARITY_EVEN,
@@ -31,7 +31,7 @@ from ctserial import common
 
 ctserial = Ctui()
 ctserial.name = "ctserial"
-ctserial.version = get_distribution("ctserial").version
+ctserial.version = version("ctserial")
 ctserial.description = (
     "a security professional's swiss army knife for interacting with serial devices"
 )
