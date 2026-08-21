@@ -37,7 +37,7 @@ ctserial.description = (
 )
 ctserial.prompt = "ctserial> "
 ctserial.session = None
-# ctserial.statusbar = f"Session:{ctserial.session.port}"
+ctserial.statusbar = lambda: f"PROJECT: {ctserial.project_name} | Connection: {ctserial.session}"
 ctserial.output_format = "mixed"
 ctserial.macros = {}
 ctserial.views = {"transactions": [["DIR", "RAW HEX", "DECODES"]]}
