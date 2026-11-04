@@ -45,3 +45,18 @@ GPL v3 and source headers state GPL v3 or later. The user explicitly selected
 `GPL-3.0-or-later` for 0.6.0 to match those existing files. Correct the package
 declaration and include the existing LICENSE via explicit `license-files`.
 Installed-artifact smoke tests verify the declaration and license-file metadata.
+
+## D6 — Show fuzz transactions during execution (accepted)
+
+The user requested each send and receive be visible before the next attempt.
+Exchanges were already awaited sequentially, but ctui only displayed the returned
+table after the whole command completed. Update the UI's rolling table and
+invalidate it at each TX, RX, no-response, or error row; yield after each exchange
+to allow rendering. Keep the final UI result from replacing the streamed table.
+CLI batches print and flush each new row to their selected stdout, followed by a
+single completion summary. Headless dispatch updates output_text and returns the
+summary/table without printing. Both pattern types share this presentation path.
+
+Temporary live-device checks returned the expected responses for standalone sends
+and fuzzing, including through terminal input. Missing responses were not
+reproduced, so this fix leaves the response deadlines and serial framing unchanged.

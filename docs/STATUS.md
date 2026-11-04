@@ -1,58 +1,62 @@
 # Current status
 
-## ctserial 0.6.0 preparation — 2026-11-04
+## ctserial 0.6.0 fuzz feedback — 2026-11-04
 
-Implementation is complete on `main`, based on `58abc18`. Changes are uncommitted;
-no tag, push, PyPI upload, or GitHub release has been performed. The changelog
-remains marked `unreleased` until publication is authorized and dated.
+The release preparation is committed locally as `a129af3` on `main`; the branch
+is one commit ahead of the local `origin/main` tracking reference. The streaming
+follow-up described below is uncommitted. No submission or publication was
+performed during this follow-up. The changelog remains marked `unreleased`.
 
-Completed:
+The 0.6.0 baseline includes ctui 1.x, Python 3.11+, native async serialx sessions,
+HexBytes/UTF-8 sends, both fuzzy-pattern commands, GPL metadata, release docs, and
+CI. See [README.md](../README.md), [DECISIONS.md](DECISIONS.md), and the
+[release checklist](../RELEASE_CHECKLIST.md) for contracts and release steps.
 
-- Version 0.6.0, Python 3.11+, ctui 1.x, and serialx 1.15.1+ with an updated uv lock.
-- `CtuiApp` migration, native async serial sessions, serialized exchanges,
-  lifecycle cleanup, device enumeration, and connection/project status.
-- `send hex` with `HexBytes`; `send utf8` with ctui string conversion followed by
-  UTF-8 encoding, as explicitly selected by the user.
-- `fuzz hex` with `FuzzyHexPattern` and `fuzz utf8` with `FuzzyStringPattern`;
-  shared lazy expansion, complete-count validation, and sequential sending.
-- Bounded responses and rolling transaction display; legacy sniffer migrated to
-  serialx with cleanup on interruption and partial-open failure.
-- Regression tests, real serialx Linux PTY integration, artifact smoke tests,
-  Python 3.11–3.14/Linux/macOS/Windows CI, and tests before tag-triggered publishing.
-- README, changelog, [decisions](DECISIONS.md), and
-  [release checklist](../RELEASE_CHECKLIST.md); license and development/release
-  documents explicitly included in distributions.
-- GPL-3.0-or-later package metadata, explicitly selected by the user to match
-  LICENSE and source headers; artifact smoke tests check the declaration.
+## Current changes
+
+- Fuzz commands update the rolling UI table immediately for each TX, RX,
+  no-response, and error row, yielding between complete exchanges for rendering.
+- CLI fuzz output prints and flushes each new row to the selected stdout and
+  prints one completion summary, without duplicating the complete table.
+- Headless dispatch still returns the summary/table without printing. Both hex
+  and UTF-8 fuzzing share the same presentation and serialized exchange path.
+- Progress remains visible if a later attempt fails. Existing response deadlines,
+  framing, and serial transmission behavior are unchanged.
+- Added regressions for intermediate UI output for both pattern types, CLI
+  streaming/flush/output routing, and preserving output after an I/O error.
 
 ## Validation
 
-Local Linux x86-64 evidence for this working tree:
+Local Linux x86-64 evidence for this follow-up:
 
-- Python 3.11.17: 35 unittest tests passed, including the real serialx PTY test.
-- Python 3.14.10: the same 35 tests passed, including the real serialx PTY test.
-- Black and isort formatting checks passed. Pylint on commands/common: 10.00/10.
-- `uv lock --check --offline` and `git diff --check` passed.
-- Final wheel and sdist built; both passed isolated Python 3.11 installed-artifact
-  smoke tests after the backend-timeout fix. Archives contain the expected metadata,
-  README and LICENSE; sdist also includes tests, release/status docs, and uv.lock,
-  with no bytecode files. Runtime/dependency metadata matches 0.6.0. Both archives
-  were rebuilt after the GPL metadata correction and passed their smoke tests;
-  direct inspection verified GPL-3.0-or-later and LICENSE inclusion in each.
-- Local documentation file links checked; whitespace review passed.
-- Console-script help worked with a temporary XDG data directory.
+- Python 3.11.17: 38 unittest tests passed, including the real serialx PTY test.
+- Python 3.14.10: the same 38 tests passed, including the real serialx PTY test.
+- Pylint on commands: 10.00/10. Black, isort, lockfile, documentation file links,
+  and whitespace checks passed.
+- Temporary live-device checks compared the user's two known requests with
+  standalone sends and repeated fuzzing. All returned the expected responses.
+- A temporary check through actual terminal input and the ctui layout also
+  returned both expected responses and observed separate TX1, RX1, TX2, RX2 table
+  updates. Missing responses were not reproduced, before or after this fix.
+- No physical device paths or device-specific integration scripts were added to
+  the repository; automated serial tests continue to use a Linux PTY.
+- Follow-up wheel and sdist rebuilt; both passed isolated Python 3.11
+  installed-artifact smoke tests, including GPL metadata checks. The GPL-corrected
+  baseline also passed direct metadata/license inclusion checks.
 
 Async worker/event-loop notification checks required execution outside the local
-sandbox; tests use temporary project directories and mocked ports or a PTY.
-This is a local environment limitation, not remote CI evidence.
+sandbox. This is local evidence, not proof of the remote platform matrix.
 
 ## Open items and next steps
 
-1. Run remote CI across the declared Python/platform matrix and exercise physical
-   serial adapters. Local PTY tests do not establish physical-adapter behavior.
-2. Follow [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md): date the changelog,
-   obtain submission authorization, commit/push, tag, and verify publication.
+1. If missing responses recur in the user's session, capture the exact connect
+   settings, command invocation, and observed transaction rows; current live
+   checks do not establish the cause of that symptom.
+2. Run remote CI across the declared Python/platform matrix. Temporary live-device
+   testing supplements the PTY tests but does not cover all adapter types.
+3. Follow [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) for authorized submission,
+   changelog dating, tagging, and publication verification.
 
-Generic timing-based response collection can attribute late bytes to the next
-exchange. Protocol framing and old ctui project import are not implemented; see
-[README.md](../README.md) and [DECISIONS.md](DECISIONS.md).
+Generic timing-based collection can attribute late bytes to the next exchange.
+Protocol framing and old ctui project import remain unimplemented, as documented
+in [README.md](../README.md) and [DECISIONS.md](DECISIONS.md).

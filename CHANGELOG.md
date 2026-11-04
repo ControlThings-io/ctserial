@@ -1,5 +1,7 @@
 # v0.6.0 (unreleased)
 
+* Display fuzz sends, responses, and errors as each exchange happens in the UI
+  and CLI, preserving progress if a later attempt fails.
 * Correct package metadata to GPL-3.0-or-later, matching LICENSE and source headers,
   and include LICENSE in both distribution formats.
 * Upgrade to ctui 1.0 and its typed, asynchronous UI/CLI application API.

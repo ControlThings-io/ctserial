@@ -5,7 +5,7 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import serialx
 from ctui import CommandError, CommandValidationError, MemoryHistory
@@ -77,6 +77,85 @@ class CommandTests(unittest.IsolatedAsyncioTestCase):
             [call.args[1] for call in self.send.await_args_list],
             [text.encode() for text in ("国admin0", "国admin1", "国user0", "国user1")],
         )
+
+    async def test_ui_displays_each_fuzz_send_and_response_before_next_send(self):
+        self.app.layout = Mock()
+        self.app.app = Mock()
+        entered = asyncio.Queue()
+        replies = [asyncio.Future(), asyncio.Future()]
+
+        async def exchange(_session, data):
+            index = self.send.await_count - 1
+            await entered.put(data)
+            return await replies[index]
+
+        self.send.side_effect = exchange
+        for command in ("fuzz hex '0[1-2]'", "fuzz utf8 '[a-b]'"):
+            with self.subTest(command=command):
+                self.app.transactions.clear()
+                self.send.reset_mock()
+                replies = [asyncio.Future(), asyncio.Future()]
+                task = asyncio.create_task(self.app.dispatch(command))
+                try:
+                    first = await asyncio.wait_for(entered.get(), timeout=2)
+                    displayed = self.app.layout.set_output.call_args.args[0]
+                    self.assertIn(first.hex(), displayed)
+                    self.assertNotIn("first reply", displayed)
+                    self.assertEqual(self.send.await_count, 1)
+                    replies[0].set_result(b"first reply")
+
+                    second = await asyncio.wait_for(entered.get(), timeout=2)
+                    displayed = self.app.layout.set_output.call_args.args[0]
+                    self.assertIn("first reply", displayed)
+                    self.assertIn(second.hex(), displayed)
+                    self.assertNotIn("second reply", displayed)
+                    replies[1].set_result(b"second reply")
+                    result = await task
+                    self.assertIsNone(result.output)
+                    displayed = self.app.layout.set_output.call_args.args[0]
+                    self.assertIn("Sent 2 payloads", displayed)
+                    self.assertIn("second reply", displayed)
+                    self.app.app.invalidate.assert_called()
+                finally:
+                    if not task.done():
+                        task.cancel()
+                        with self.assertRaises(asyncio.CancelledError):
+                            await task
+
+    async def test_cli_flushes_fuzz_rows_to_selected_stream_without_duplicates(self):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        stdout.flush = Mock()
+
+        async def exchange(_session, data):
+            self.assertIn(data.hex(), stdout.getvalue())
+            if data == b"\x02":
+                self.assertIn("first reply", stdout.getvalue())
+            stdout.flush.assert_called()
+            return b"first reply" if data == b"\x01" else b"second reply"
+
+        self.send.side_effect = exchange
+        with patch("sys.stdout", new_callable=io.StringIO) as default_stdout:
+            status = await self.app.run_cli(
+                ["-c", "fuzz hex '0[1-2]'"], stdout=stdout, stderr=stderr
+            )
+        self.assertEqual(status, 0, stderr.getvalue())
+        self.assertEqual(default_stdout.getvalue(), "")
+        self.assertEqual(stdout.getvalue().count("-->"), 2)
+        self.assertEqual(stdout.getvalue().count("<--"), 2)
+        self.assertEqual(stdout.getvalue().count("Sent 2 payloads"), 1)
+        self.assertIn("second reply", stdout.getvalue())
+        self.assertIsNone(self.app._cli_stdout)
+
+    async def test_fuzz_failure_leaves_progress_visible(self):
+        self.app.layout = Mock()
+        self.app.app = Mock()
+        self.send.side_effect = [b"first reply", OSError("device disconnected")]
+        with self.assertRaisesRegex(CommandError, "device disconnected"):
+            await self.app.dispatch("fuzz hex '0[1-2]'")
+        displayed = self.app.layout.set_output.call_args.args[0]
+        self.assertIn("first reply", displayed)
+        self.assertIn("device disconnected", displayed)
+        self.assertEqual(self.send.await_count, 2)
 
     async def test_fuzz_limit_rejects_entire_pattern_before_sending(self):
         for command in ("fuzz hex '???0'", "fuzz utf8 '[a-z]{2}'"):

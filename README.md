@@ -70,10 +70,11 @@ ctserial> fuzz hex "??" --limit 256
 ```
 
 Both commands expand lazily and send one payload at a time, waiting for each
-response. The default maximum is 256 payloads. Set `--limit N` to change it, up to
-65,536. A pattern larger than the limit is rejected before sending anything;
-it is never silently truncated. No response is recorded and fuzzing continues;
-an I/O error stops the sequence. A running fuzz command holds the connection
+response. The UI updates after every send and receive; CLI output flushes each
+transaction row immediately. The default maximum is 256 payloads. Set `--limit N`
+to change it, up to 65,536. A pattern larger than the limit is rejected before
+sending anything; it is never silently truncated. A missing response is displayed
+as `No response received` and fuzzing continues; an I/O error stops the sequence. A running fuzz command holds the connection
 until it finishes or is cancelled, so other sends and `close` wait their turn.
 
 ### Responses and projects
