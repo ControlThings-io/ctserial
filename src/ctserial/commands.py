@@ -9,172 +9,257 @@
 # FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
 # details at <http://www.gnu.org/licenses/>.
 
-import re
-import shlex
+"""Typed UI/CLI commands and the lifecycle of one asynchronous serial session.
+
+The connection lock covers connect, close, and complete send/fuzz operations so
+concurrent UI commands cannot mix responses or close a port during an exchange.
+Transaction output is an in-memory rolling window; ctui owns project history.
+"""
+
+import asyncio
+from collections import deque
 from importlib.metadata import version
 
-from ctui import Ctui
-from ctui.dialogs import message_dialog
-from serial import (
-    EIGHTBITS,
-    PARITY_EVEN,
-    PARITY_MARK,
-    PARITY_NONE,
-    PARITY_ODD,
-    PARITY_SPACE,
-    STOPBITS_ONE,
-    Serial,
+import serialx
+from ctui import (
+    Argument,
+    CommandError,
+    CtuiApp,
+    FuzzyHexPattern,
+    FuzzyStringPattern,
+    HexBytes,
+    command,
 )
 from tabulate import tabulate
 
 from ctserial import common
 
-ctserial = Ctui()
-ctserial.name = "ctserial"
-ctserial.version = version("ctserial")
-ctserial.description = (
-    "a security professional's swiss army knife for interacting with serial devices"
-)
-ctserial.prompt = "ctserial> "
-ctserial.session = None
-ctserial.statusbar = lambda: f"PROJECT: {ctserial.project_name} | Connection: {ctserial.session}"
-ctserial.output_format = "mixed"
-ctserial.macros = {}
-ctserial.views = {"transactions": [["DIR", "RAW HEX", "DECODES"]]}
+PARITIES = {parity.name.lower(): parity for parity in serialx.Parity}
 
 
-@ctserial.command
-def do_connect(device: str = "/dev/null/", baudrate: int = 9600, parity: str = "none"):
+class CtserialApp(CtuiApp):
+    """Interact with one serial device through ctui's shared UI/CLI dispatcher.
+
+    session is owned by this instance and closed by on_stop in UI and CLI modes.
+    Only the most recent 1,000 transaction rows are retained for display.
     """
-    Connect to a serial device
 
-    :PARAM: device: Serial device path or COM port
-    :PARAM: baudrate: Defaults to 9600. Most standard rates from 75 to 4000000 supported.
-    :PARAM: parity: Defaults to none. Can also be even, odd, mark, or space
-    """
-    assert (
-        ctserial.session == None
-    ), "Session already open.  Close first."  # ToDo assert session type
-    valid_device = common.validate_serial_device(device)
-    parities = {
-        "none": PARITY_NONE,
-        "even": PARITY_EVEN,
-        "odd": PARITY_ODD,
-        "mark": PARITY_MARK,
-        "space": PARITY_SPACE,
-    }
-    assert (
-        parity in parities.keys()
-    ), "Parity must be none (default), even, odd, mark, or space"
-    s = Serial(
-        port=valid_device,
-        baudrate=baudrate,
-        parity=parities[parity],
-        stopbits=STOPBITS_ONE,
-        bytesize=EIGHTBITS,
+    name = "ctserial"
+    version = version("ctserial")
+    description = "A security professional's tool for interacting with serial devices"
+    prompt = "ctserial> "
+    app_id = "io.controlthings.ctserial"
+
+    def __init__(self, **kwargs):
+        """Initialize runtime state; forward service configuration to CtuiApp."""
+        super().__init__(**kwargs)
+        self.session: serialx.AsyncSerial | None = None
+        self.device: str | None = None
+        self.transactions: deque[list[str]] = deque(maxlen=1000)
+        self._connection_lock = asyncio.Lock()
+        self.statusbar = self.connection_status
+
+    def connection_status(self) -> str:
+        """Return the active ctui project and serial device for the status bar."""
+        project = self.backend.current if self.backend is not None else None
+        project_name = project.name if project is not None else "default"
+        connection = self.device if self.session is not None else "disconnected"
+        return f"PROJECT: {project_name} | Connection: {connection}"
+
+    @command
+    async def devices(self) -> str:
+        """List available serial devices, manufacturers, and products."""
+        try:
+            return await common.list_serial_devices()
+        except (OSError, serialx.SerialException) as error:
+            raise CommandError(f"Could not list serial devices: {error}") from error
+
+    @command(
+        arguments={
+            "device": Argument(help="Serial device path, COM port, or serialx URL"),
+            "baudrate": Argument(
+                help="Baud rate (default: 9600)", validator=lambda value: value > 0
+            ),
+            "parity": Argument(help="Parity (default: none)", choices=PARITIES),
+        }
     )
-    assert s.isOpen(), f"Could not connect to {valid_device}"
-    ctserial.session = s
-    message_dialog("SUCCESS", f"ASCII session OPENED with {valid_device}")
-    return
+    async def connect(
+        self, device: str, baudrate: int = 9600, parity: str = "none"
+    ) -> str:
+        """Open a serial device with eight data bits and one stop bit.
 
+        Open the supplied path directly, including symlinks and virtual ports
+        that device enumeration may omit. An existing connection must be closed
+        first. Failed opens leave the application disconnected.
+        """
+        async with self._connection_lock:
+            if self.session is not None:
+                raise CommandError("Session already open. Close it first.")
+            session = serialx.async_serial_for_url(
+                device,
+                baudrate=baudrate,
+                parity=PARITIES[parity],
+                stopbits=serialx.StopBits.ONE,
+                byte_size=8,
+            )
+            try:
+                await session.open()
+            except (OSError, ValueError, serialx.SerialException) as error:
+                raise CommandError(f"Could not connect to {device}: {error}") from error
+            self.session, self.device = session, device
+            return f"Session OPENED with {device}"
 
-@ctserial.command
-def do_close():
-    """
-    Close the open session
-    """
-    assert (
-        ctserial.session
-    ), "There is not an open session.  Connect to one first."  # ToDo assert session type
-    dev = ctserial.session.port
-    ctserial.session.close()
-    ctserial.session = None
-    message_dialog("SUCCESS", f"Session with {dev} CLOSED")
-    return
+    async def _close_session(self) -> None:
+        """Close while holding the connection lock; clear state even on failure."""
+        try:
+            if self.session is not None:
+                await self.session.close()
+        finally:
+            self.session = None
+            self.device = None
 
+    @command
+    async def close(self) -> str:
+        """Close the open serial session after any active send or fuzz command."""
+        async with self._connection_lock:
+            self._require_session()
+            device = self.device
+            try:
+                await self._close_session()
+            except (OSError, serialx.SerialException) as error:
+                raise CommandError(f"Could not close {device}: {error}") from error
+            return f"Session with {device} CLOSED"
 
-@ctserial.command
-def do_send():
-    """Various send functions..."""
+    async def on_stop(self) -> None:
+        """Release the serial connection on normal exit or CLI command failure."""
+        async with self._connection_lock:
+            await self._close_session()
 
+    def _require_session(self) -> serialx.AsyncSerial:
+        """Return the session or raise a user-facing error before sending."""
+        if self.session is None:
+            raise CommandError("There is not an open session. Connect to one first.")
+        return self.session
 
-@ctserial.command
-def do_send_hex(data: str):
-    """
-    Send raw hex to serial device, ignoring spaces \\x and 0x.
-
-    :PARAM: data: Raw hex to send.
-    """
-    assert (
-        ctserial.session
-    ), "There is not an open session.  Connect to one first."  # ToDo assert session type
-    raw_hex = data.lower().replace("0x", "").replace("\\x", "").replace(" ", "")
-    assert re.match("^[0123456789abcdef]+$", raw_hex), "Only hex characters allowed"
-    # assert len(raw_hex) % 2 != 0, "You must send an even number of hex characters"
-    tx_bytes = bytes.fromhex(raw_hex)
-    ctserial.views["transactions"].append(
-        [
-            "-->",
-            common.bytes2hexstr(tx_bytes, group=8, sep=" ", line=35),
-            common.bytes_decode(tx_bytes),
-        ]
-    )
-    rx_bytes = common.send_instruction(ctserial.session, tx_bytes)
-    if rx_bytes:
-        ctserial.views["transactions"].append(
+    def _record(self, direction: str, data: bytes) -> None:
+        """Append a hex/decoded transaction row to the rolling display window."""
+        self.transactions.append(
             [
-                "<--",
-                common.bytes2hexstr(rx_bytes, group=8, sep=" ", line=35),
-                common.bytes_decode(rx_bytes),
+                direction,
+                common.bytes2hexstr(data, group=8, sep=" ", line=35),
+                common.bytes_decode(data),
             ]
         )
-    else:
-        message_dialog("ERROR", "No response received")
-    return tabulate(
-        ctserial.views["transactions"], tablefmt="plain", headers="firstrow"
-    )
 
-
-@ctserial.command
-def do_send_utf8(data: str):
-    """
-    Send UTF-8 string to serial device.
-
-    :PARAM: data: UTF-8 string to send.
-    """
-    assert (
-        ctserial.session
-    ), "There is not an open session.  Connect to one first."  # ToDo assert session type
-    utf8_str = "".join(shlex.split(data))  # remove spaces not in quotes and format
-    tx_bytes = bytes(utf8_str, encoding="utf-8")
-    ctserial.views["transactions"].append(
-        [
-            "-->",
-            common.bytes2hexstr(tx_bytes, group=8, sep=" ", line=35),
-            common.bytes_decode(tx_bytes),
-        ]
-    )
-    rx_bytes = common.send_instruction(ctserial.session, tx_bytes)
-    if rx_bytes:
-        ctserial.views["transactions"].append(
-            [
-                "<--",
-                common.bytes2hexstr(rx_bytes, group=8, sep=" ", line=35),
-                common.bytes_decode(rx_bytes),
-            ]
+    def _transaction_table(self) -> str:
+        """Render the retained transaction rows with their column labels."""
+        return tabulate(
+            self.transactions, headers=["DIR", "RAW HEX", "DECODES"], tablefmt="plain"
         )
-    else:
-        message_dialog("ERROR", "No response received")
-    return tabulate(
-        ctserial.views["transactions"], tablefmt="plain", headers="firstrow"
+
+    async def _exchange(self, data: bytes) -> None:
+        """Record a send and its response while the caller holds the lock.
+
+        No response is a visible transaction result, allowing fuzzing to continue.
+        I/O/size failures stop the command; cancellation propagates unchanged.
+        The sent row remains visible even if receiving fails.
+        """
+        session = self._require_session()
+        self._record("-->", data)
+        try:
+            response = await common.send_instruction(session, data)
+        except (OSError, ValueError, serialx.SerialException) as error:
+            self.transactions.append(["!", "", str(error)])
+            raise CommandError(f"Serial exchange failed: {error}") from error
+        if response:
+            self._record("<--", response)
+        else:
+            self.transactions.append(["<--", "", "No response received"])
+
+    @command(arguments={"data": Argument(help="Hexadecimal bytes; quote separators")})
+    async def send_hex(self, data: HexBytes) -> str:
+        """Send bytes parsed by ctui's HexBytes and show the transaction table."""
+        async with self._connection_lock:
+            await self._exchange(data)
+            return self._transaction_table()
+
+    @command(
+        arguments={
+            "data": Argument(
+                help="Text to encode as UTF-8; quote spaces and backslashes"
+            )
+        }
     )
+    async def send_utf8(self, data: str) -> str:
+        """Encode ctui's parsed string as UTF-8 and show the transaction table.
+
+        Shell-like quoting is handled once by ctui. Preserve the resulting text,
+        including spaces and literal backslashes; do not interpret byte escapes.
+        """
+        async with self._connection_lock:
+            await self._exchange(data.encode("utf-8"))
+            return self._transaction_table()
+
+    @command(
+        arguments={
+            "pattern": Argument(help="Finite hex pattern, e.g. 'de[0-3]?'"),
+            "limit": Argument(
+                help="Maximum complete expansion (default: 256; maximum: 65536)",
+                flags=("--limit",),
+                validator=lambda value: 1 <= value <= 65_536,
+            ),
+        }
+    )
+    async def fuzz_hex(self, pattern: FuzzyHexPattern, limit: int = 256) -> str:
+        """Send every expansion in order, waiting for each response before sending.
+
+        Reject patterns exceeding --limit before any bytes are sent. The whole
+        sequence holds the connection lock. I/O failure or cancellation stops the
+        sequence without retrying; a missing response continues to the next value.
+        """
+        return await self._fuzz(pattern, limit)
+
+    @command(
+        arguments={
+            "pattern": Argument(help="Finite string pattern, e.g. 'user[0-3]'"),
+            "limit": Argument(
+                help="Maximum complete expansion (default: 256; maximum: 65536)",
+                flags=("--limit",),
+                validator=lambda value: 1 <= value <= 65_536,
+            ),
+        }
+    )
+    async def fuzz_utf8(self, pattern: FuzzyStringPattern, limit: int = 256) -> str:
+        """Expand a finite string pattern and send each result encoded as UTF-8.
+
+        Apply the same limits, sequential exchanges, and failure behavior as
+        fuzz hex. Quote patterns containing spaces or backslashes.
+        """
+        return await self._fuzz(pattern, limit)
+
+    async def _fuzz(
+        self, pattern: FuzzyHexPattern | FuzzyStringPattern, limit: int
+    ) -> str:
+        """Validate the complete expansion before sending bytes or UTF-8 strings.
+
+        Hold the connection lock for the full sequence. Keep generation lazy and
+        the display window bounded even when an explicitly raised limit is used.
+        """
+        try:
+            payloads = pattern.expand(limit=limit)
+        except ValueError as error:
+            raise CommandError(str(error)) from error
+        async with self._connection_lock:
+            self._require_session()
+            for payload in payloads:
+                data = payload.encode("utf-8") if isinstance(payload, str) else payload
+                await self._exchange(data)
+            return f"Sent {pattern.count:,} payloads.\n{self._transaction_table()}"
 
 
-def main():
-    ctserial.run()
-    if ctserial.session:
-        ctserial.session.close()
+def main() -> None:
+    """Run the interactive UI or ctui's automatic CLI with lifecycle cleanup."""
+    CtserialApp().run()
 
 
 if __name__ == "__main__":

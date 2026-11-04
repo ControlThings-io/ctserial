@@ -11,60 +11,85 @@
 # details at <http://www.gnu.org/licenses/>.
 """
 
-import operator
-import time
+import asyncio
+import math
 import unicodedata
 from textwrap import wrap
 
-from ctui.dialogs import message_dialog
-from serial.tools.list_ports import comports
+from serialx import AsyncSerial, async_list_serial_ports
 from tabulate import tabulate
 
 
-def validate_serial_device(device):
-    """
-    Verify requested serial device is connected to the system
-
-    :PARAM: device: A device file path or comm port
-    """
-    devices = [x.device for x in comports()]
-    assert device in devices, "{} is not in: \n{} ".format(
-        device, list_serial_devices()
+async def list_serial_devices() -> str:
+    """Return a device table using serialx's asynchronous port enumeration."""
+    devices = await async_list_serial_ports()
+    rows = sorted(
+        (dev.device, dev.manufacturer or "", dev.product or "") for dev in devices
     )
-    return device
+    return tabulate(
+        rows, headers=["DEVICE", "MANUFACTURER", "PRODUCT"], tablefmt="fancy_grid"
+    )
 
 
-def list_serial_devices():
-    headers = ["DEVICE", "MANUFACTURER", "PRODUCT ID"]
-    rows = []
-    for dev in comports():
-        columns = []
-        columns.append(dev.device)
-        columns.append(dev.manufacturer)
-        columns.append(dev.product)
-        rows.append(columns)
-    table = sorted(rows, key=operator.itemgetter(0))
-    return tabulate(table, headers=headers, tablefmt="fancy_grid")
+async def send_instruction(
+    session: AsyncSerial,
+    tx_bytes: bytes,
+    *,
+    timeout: float = 1.0,
+    idle_timeout: float = 0.1,
+    max_response: int = 65_536,
+) -> bytes:
+    """Write bytes and collect a response without blocking the event loop.
+
+    Wait at most timeout seconds for writing and reading together. After the
+    first chunk, idle_timeout seconds of silence ends the response. Return b""
+    when no response arrives, or the accumulated bytes at the overall deadline.
+    These timing boundaries cannot identify protocol frames; late bytes remain
+    buffered for the next read. Never discard pending input implicitly.
+
+    Read at most max_response bytes; raise ValueError if the response exceeds
+    that cap. EOF raises ConnectionError. I/O failures and cancellation propagate.
+    Callers must serialize exchanges on each connection.
+    """
+    if not all(math.isfinite(value) and value > 0 for value in (timeout, idle_timeout)):
+        raise ValueError("Response timeouts must be finite and positive")
+    if max_response < 1:
+        raise ValueError("Response byte limit must be positive")
+    response = bytearray()
+    deadline = asyncio.get_running_loop().time() + timeout
+    # A write timeout is an error: the caller cannot know how much was sent.
+    async with asyncio.timeout(timeout):
+        await session.write(tx_bytes)
+    while True:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            return bytes(response)
+        wait = min(remaining, idle_timeout) if response else remaining
+        read_timeout = asyncio.timeout(wait)
+        try:
+            async with read_timeout:
+                chunk = await session.read(min(4096, max_response + 1 - len(response)))
+        except TimeoutError:
+            if read_timeout.expired():
+                return bytes(response)
+            raise
+        if not chunk:
+            raise ConnectionError(
+                "Serial connection closed while waiting for a response"
+            )
+        response.extend(chunk)
+        if len(response) > max_response:
+            raise ValueError(f"Response exceeds {max_response:,} bytes")
 
 
-def send_instruction(session, tx_bytes):
-    """Send data to serial device"""
-    # clear out any leftover data
-    try:
-        rx_raw = bytes()
-        if session.inWaiting() > 0:
-            session.flushInput()
-        session.write(tx_bytes)
-        time.sleep(0.1)
-        while session.inWaiting() > 0:
-            rx_raw += session.read()
-    except BaseException as e:
-        message_dialog("ERROR", "\n\n{}".format(e))
-    time.sleep(0.1)
-    return rx_raw
+def bytes2hexstr(
+    raw_bytes: bytes, group: int = 0, sep: str = " ", line: int = 0
+) -> str:
+    """Return lowercase hex, optionally grouping digits and wrapping text.
 
-
-def bytes2hexstr(raw_bytes, group=0, sep=" ", line=0):
+    group counts hexadecimal characters, not bytes. Zero disables grouping or
+    line wrapping; line uses textwrap's whitespace-aware wrapping semantics.
+    """
     hexstr = raw_bytes.hex()
     if group:
         hexstr = sep.join(hexstr[i : i + group] for i in range(0, len(hexstr), group))
@@ -73,7 +98,8 @@ def bytes2hexstr(raw_bytes, group=0, sep=" ", line=0):
     return hexstr
 
 
-def replace_control_characters(string):
+def replace_control_characters(string: str) -> str:
+    """Replace Unicode category C characters with the replacement character."""
     safe_string = []
     for char in string:
         if unicodedata.category(char)[0] != "C":
@@ -83,22 +109,20 @@ def replace_control_characters(string):
     return "".join(safe_string)
 
 
-def bytes2ascii(raw_bytes):
-    ascii = raw_bytes.decode("ascii", "replace")
-    safe_ascii = replace_control_characters(ascii)
-    return safe_ascii
+def bytes2ascii(raw_bytes: bytes) -> str:
+    """Decode ASCII with replacement and remove terminal control characters."""
+    return replace_control_characters(raw_bytes.decode("ascii", "replace"))
 
 
-def bytes2utf8(raw_bytes):
-    utf8 = raw_bytes.decode("utf-8", "replace")
-    safe_utf8 = replace_control_characters(utf8)
-    return safe_utf8
+def bytes2utf8(raw_bytes: bytes) -> str:
+    """Decode UTF-8 with replacement and remove terminal control characters."""
+    return replace_control_characters(raw_bytes.decode("utf-8", "replace"))
 
 
-def bytes_decode(raw_bytes):
-    ascii = bytes2ascii(raw_bytes)
+def bytes_decode(raw_bytes: bytes) -> str:
+    """Label the ASCII decode, adding UTF-8 only when the decodes differ."""
+    ascii_text = bytes2ascii(raw_bytes)
     utf8 = bytes2utf8(raw_bytes)
-    if ascii == utf8:
-        return f"ASCII: {ascii}"
-    else:
-        return f"ASCII: {ascii}\nUTF-8: {utf8}"
+    if ascii_text == utf8:
+        return f"ASCII: {ascii_text}"
+    return f"ASCII: {ascii_text}\nUTF-8: {utf8}"
