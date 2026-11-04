@@ -41,14 +41,23 @@ class ExchangeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ticked.is_set())
 
     async def test_continuous_response_has_overall_deadline(self):
+        """Advance virtual time per chunk without relying on OS timer resolution."""
+        loop = asyncio.get_running_loop()
+        now = loop.time()
+        chunks = [b"one", b"two", b"three"]
+
         async def read(_size):
-            await asyncio.sleep(0.002)
-            return b"x"
+            nonlocal now
+            self.assertTrue(chunks, "Read continued past the overall deadline")
+            now += 0.04
+            return chunks.pop(0)
 
         self.session.read.side_effect = read
-        async with asyncio.timeout(1):
-            result = await common.send_instruction(self.session, b"ping", timeout=0.02)
-        self.assertTrue(result)
+        # Reads complete synchronously while advancing time, so neither a real
+        # timer nor an idle gap ends the response. The overall deadline must.
+        with patch.object(loop, "time", side_effect=lambda: now):
+            result = await common.send_instruction(self.session, b"ping", timeout=0.1)
+        self.assertEqual(result, b"onetwothree")
 
     async def test_response_size_is_bounded(self):
         self.session.read.return_value = b"12345"

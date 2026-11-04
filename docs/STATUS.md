@@ -1,57 +1,67 @@
 # Current status
 
-## ctserial 0.6.0 connect suggestions — 2026-11-04
+## ctserial 0.6.0 CI timing fix — 2026-11-04
 
-The release and prior display work are committed through `493e2f5` on `main`,
-three commits ahead of the local `origin/main` reference. Device completion is
-uncommitted. No submission or publication occurred during this follow-up; the
-changelog remains `unreleased`.
+Work is based on `aa9e90a` on `main`, aligned with the local `origin/main`
+reference at inspection. The test-only fix below is uncommitted. No commit,
+push, PR update, or workflow rerun was performed. The release is still unreleased.
 
-The baseline includes ctui 1.x, Python 3.11+, native async serialx sessions,
-HexBytes/UTF-8 sends, both fuzzy-pattern commands, live fuzz output, single-line
-UTF-8 transaction rows, GPL metadata, and release CI. See [README.md](../README.md),
-[DECISIONS.md](DECISIONS.md), and [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md).
+The 0.6.0 implementation includes async serialx sessions, ctui 1.x commands,
+streaming fuzz output, single-line UTF-8 rows, and device-name completion. See
+[README.md](../README.md), [DECISIONS.md](DECISIONS.md), and
+[RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) for behavior and release steps.
 
-## Current changes
+## Current fix and evidence
 
-- `connect` suggests asynchronously enumerated native serial paths, with
-  device-reported `Manufacturer | Product` details as explicitly chosen by the
-  user. Trim descriptor padding and omit missing fields; no USB database labels
-  or numeric IDs are displayed.
-- Resolve stable symlinks to native port names for suggestions; sort/deduplicate
-  paths. Use `Serial device` when manufacturer and product are both unavailable.
-- Keep manual paths and serialx URLs usable, including on enumeration failure.
-- Added completion/filtering and enumeration-failure regressions; connection
-  tests mock enumeration rather than consulting the host's devices.
-- Updated README, changelog, and decision D8.
+The remaining failure on the Black Dependabot PR is an asyncio deadline test,
+not the formatter. It assumed a 2 ms sleep would deliver a response before a
+20 ms deadline. Replace real sleeps in that test with a controlled loop clock
+advanced on each synchronous read. Assert all expected chunks are collected
+and fail if reading continues beyond the overall deadline. Runtime serial timing
+and dependency declarations/lockfile are unchanged; no lockfile bump is needed
+for this failure.
 
-## Validation
+Observed remote results on 2026-11-04:
 
-- Python 3.11.17 on Linux x86-64: all 41 tests passed, including the real serialx
-  PTY test, mocked device completion/filtering, and manual-connect fallback.
-- Black and isort passed; Pylint on commands/common: 10.00/10. Lockfile and
-  whitespace and documentation file-link checks passed.
-- A temporary check using the actual ctui layout/completer and live device
-  enumeration produced the user's chosen path/details format exactly. No serial
-  port was opened and no serial data was sent during this completion check.
-- Historical evidence: `493e2f5` passed 39 Python 3.11 tests; `1c11eb5` passed
-  38 tests on Python 3.11 and 3.14 plus wheel/sdist smoke tests. Prior temporary
-  physical-device checks verified expected send/fuzz responses; missing responses
-  were not reproduced. No physical device is required by repository tests.
-- Existing artifacts predate the display/completion changes. No current artifact
-  rebuild, Python 3.14 rerun, or remote CI success is claimed for this follow-up.
+- [Black PR #1 run](https://github.com/ControlThings-io/ctserial/actions/runs/41866049624)
+  at `e9fdd016`: style passed; Windows Python 3.11 and 3.12 failed only
+  `test_continuous_response_has_overall_deadline` with an empty response.
+- [Main run](https://github.com/ControlThings-io/ctserial/actions/runs/41865704019)
+  at `aa9e90a`: the same test failed on Windows Python 3.11 with Black 26.5.1.
+- [Pylint PR #2 run](https://github.com/ControlThings-io/ctserial/actions/runs/41866068037)
+  succeeded. No Pylint change is part of this fix.
 
-Async worker/event-loop notification checks require execution outside the local
-sandbox. Local results do not establish remote platform-matrix success.
+Internet research corroborates this class of timing issue. Python's
+[3.11/3.12 platform documentation](https://docs.python.org/3.12/library/asyncio-platforms.html#windows)
+describes typical Windows monotonic-clock resolution around 15.6 ms. CPython
+[issue #110088](https://github.com/python/cpython/issues/110088) records
+Windows GitHub Actions timing assertions failing under CI scheduling, and its
+[asyncio test utilities](https://github.com/python/cpython/blob/main/Lib/test/test_asyncio/utils.py)
+allow clock-resolution tolerance. These support the timing diagnosis; they do
+not establish a Black defect. No matching Black issue was found in the searches.
 
-## Open items and next steps
+## Local validation
 
-1. Before release, run remote CI and rebuild/smoke-test both distributions.
-   Follow [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md) for authorized submission,
-   changelog dating, tagging, and publication verification.
-2. If missing responses recur, capture connection settings, the exact command,
-   and transaction rows. Current live-device checks do not establish that cause.
+- A temporary delayed-scheduling simulation reproduced the old empty-response
+  assertion failure; the same simulation passes with the revised test.
+- Python 3.11.17 and Python 3.14.10 on Linux x86-64: all 41 tests passed, including
+  the real serialx PTY test.
+- Black 26.10.1, the Dependabot version, passed `--check src tests` in an isolated
+  environment. The changed file also passed locked Black 26.5.1 and isort.
+- `uv lock --check --offline`, `git diff --check`, and documentation file-link
+  checks passed.
+- No fixed Windows run or remote matrix success is claimed yet. Local async
+  checks require execution outside this environment's notification-restricting
+  sandbox. Existing release artifacts predate this test-only change.
 
-Generic timing-based collection can attribute late bytes to the next exchange.
-Protocol framing and old ctui project import remain unimplemented; see
-[README.md](../README.md) and [DECISIONS.md](DECISIONS.md).
+## Next steps
+
+1. After authorized submission, confirm the Windows jobs pass and update/rebase
+   the Black Dependabot PR onto the fix. Its existing run predates this change.
+2. Complete remaining release checks and artifact validation using
+   [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md).
+
+If missing serial responses recur, capture connection settings, commands, and
+transaction rows. Previous temporary physical-device checks returned expected
+responses, but did not establish the cause of the reported symptom. Generic
+response framing and old ctui project import remain as documented in the README.
