@@ -143,6 +143,17 @@ uv run isort --check-only src tests
 uv lock --check
 ```
 
+To refresh Black and Pylint to the latest compatible stable releases:
+
+```bash
+uv lock --upgrade-package black --upgrade-package pylint
+uv sync --locked --python 3.11
+```
+
+Review the lockfile changes and rerun checks after updating developer tools;
+new versions can change diagnostics or formatting. Keep the tested lockfile
+checked in so development and CI use the same versions.
+
 The Linux integration test uses a pseudo-terminal with the real serialx backend;
 no physical serial device is required. It is skipped on other platforms.
 See [current status](docs/STATUS.md), [decisions](docs/DECISIONS.md), and the
