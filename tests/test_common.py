@@ -100,10 +100,11 @@ class PresentationTests(unittest.TestCase):
     """Keep binary output readable even for control bytes and invalid Unicode."""
 
     def test_control_bytes_are_replaced(self):
-        output = common.bytes_decode(b"\x00\x1bHello\xff")
+        output = common.bytes_decode(b"\x00\x1bHello\xff\r\n" + "\u2028\u2029".encode())
         self.assertNotIn("\x1b", output)
         self.assertIn("Hello", output)
+        self.assertEqual(len(output.splitlines()), 1)
 
     def test_utf8_decode_and_hex_grouping(self):
-        self.assertIn("UTF-8: 国", common.bytes_decode("国".encode()))
+        self.assertEqual(common.bytes_decode("国".encode()), "国")
         self.assertEqual(common.bytes2hexstr(b"\xde\xad\xc0\xde", group=4), "dead c0de")

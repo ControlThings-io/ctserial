@@ -85,11 +85,13 @@ raises an error. These timing boundaries do not identify protocol frames; late
 bytes remain buffered and may appear in the next exchange. Adjust the application
 for protocols requiring explicit framing or different timings.
 
-The UI displays the most recent 1,000 transaction rows with hexadecimal, ASCII,
-and UTF-8 decodes. Transaction rows are kept in memory. ctui's project commands
-manage persistent command history in the platform's user-data directory. The
-status bar shows the active project and connection. Serial ports close on exit,
-including CLI command failures.
+The UI displays the most recent 1,000 transaction rows, one line per send or
+receive, with hexadecimal grouped every four bytes and a single UTF-8 decode.
+Invalid UTF-8 bytes and control characters are replaced with `�`. Long rows can
+be scrolled horizontally in the UI. Transaction rows are kept in memory. ctui's
+project commands manage persistent command history in the platform's user-data
+directory. The status bar shows the active project and connection. Serial ports
+close on exit, including CLI command failures.
 
 ### Command-line usage
 

@@ -99,10 +99,11 @@ def bytes2hexstr(
 
 
 def replace_control_characters(string: str) -> str:
-    """Replace Unicode category C characters with the replacement character."""
+    """Replace Unicode controls and line/paragraph separators to keep one row."""
     safe_string = []
     for char in string:
-        if unicodedata.category(char)[0] != "C":
+        category = unicodedata.category(char)
+        if category[0] != "C" and category not in ("Zl", "Zp"):
             safe_string.append(char)
         else:
             safe_string.append("\ufffd")
@@ -120,9 +121,9 @@ def bytes2utf8(raw_bytes: bytes) -> str:
 
 
 def bytes_decode(raw_bytes: bytes) -> str:
-    """Label the ASCII decode, adding UTF-8 only when the decodes differ."""
-    ascii_text = bytes2ascii(raw_bytes)
-    utf8 = bytes2utf8(raw_bytes)
-    if ascii_text == utf8:
-        return f"ASCII: {ascii_text}"
-    return f"ASCII: {ascii_text}\nUTF-8: {utf8}"
+    """Return only safe UTF-8 text, replacing invalid bytes and control characters.
+
+    Column headers supply the encoding label; decoded data has no prefix or
+    additional ASCII representation. Embedded CR/LF bytes cannot split a row.
+    """
+    return bytes2utf8(raw_bytes)

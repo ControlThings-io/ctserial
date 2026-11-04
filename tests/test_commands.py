@@ -51,6 +51,31 @@ class CommandTests(unittest.IsolatedAsyncioTestCase):
                     await self.app.dispatch(f"send hex {data}")
         self.send.assert_not_awaited()
 
+    async def test_long_transactions_keep_grouped_hex_and_utf8_on_one_line(self):
+        payload = b"abcdefgh" * 8
+        self.send.return_value = "国\r\nX".encode() + b"\xff"
+        for command in (f"send hex {payload.hex()}", f"fuzz hex {payload.hex()}"):
+            with self.subTest(command=command):
+                self.app.transactions.clear()
+                result = await self.app.dispatch(command)
+                rows = result.output.splitlines()
+                transaction_rows = [row for row in rows if "-->" in row or "<--" in row]
+                self.assertEqual(len(transaction_rows), 2)
+                self.assertIn(
+                    "61626364 65666768 " * 7 + "61626364 65666768", transaction_rows[0]
+                )
+                self.assertIn("abcdefgh" * 8, transaction_rows[0])
+                self.assertIn("国��X�", transaction_rows[1])
+                self.assertIn("UTF-8", result.output)
+                self.assertNotIn("ASCII", result.output)
+                self.assertTrue(
+                    all(
+                        "\n" not in cell
+                        for row in self.app.transactions
+                        for cell in row
+                    )
+                )
+
     async def test_utf8_preserves_spaces_unicode_quotes_and_backslashes(self):
         cases = {
             'send utf8 "Dead Code 国"': "Dead Code 国".encode(),

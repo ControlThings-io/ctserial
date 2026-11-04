@@ -60,3 +60,13 @@ summary/table without printing. Both pattern types share this presentation path.
 Temporary live-device checks returned the expected responses for standalone sends
 and fuzzing, including through terminal input. Missing responses were not
 reproduced, so this fix leaves the response deadlines and serial framing unchanged.
+
+## D7 — One line per payload with UTF-8 text (accepted)
+
+The user requested unwrapped payloads while retaining byte grouping and only
+UTF-8 output. Each TX/RX row now contains all hex bytes grouped every four bytes,
+with no inserted line breaks, and one UTF-8 text cell under a UTF-8 header.
+Replace invalid UTF-8, Unicode controls, and line/paragraph separators with the
+replacement character so binary payloads cannot split the decoded cell into
+multiple lines. The UI continues to allow horizontal scrolling of long rows.
+This applies to both send commands and both streaming fuzz commands.

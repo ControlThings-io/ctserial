@@ -162,11 +162,11 @@ class CtserialApp(CtuiApp):
         return self.session
 
     def _record(self, direction: str, data: bytes) -> None:
-        """Append a hex/decoded transaction row to the rolling display window."""
+        """Append one unwrapped row with grouped hex and a safe UTF-8 decode."""
         self.transactions.append(
             [
                 direction,
-                common.bytes2hexstr(data, group=8, sep=" ", line=35),
+                common.bytes2hexstr(data, group=8, sep=" "),
                 common.bytes_decode(data),
             ]
         )
@@ -174,7 +174,7 @@ class CtserialApp(CtuiApp):
     def _transaction_table(self) -> str:
         """Render the retained transaction rows with their column labels."""
         return tabulate(
-            self.transactions, headers=["DIR", "RAW HEX", "DECODES"], tablefmt="plain"
+            self.transactions, headers=["DIR", "RAW HEX", "UTF-8"], tablefmt="plain"
         )
 
     def _show_fuzz_progress(self, *, summary: str | None = None) -> None:
