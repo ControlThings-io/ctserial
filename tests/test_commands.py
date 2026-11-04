@@ -5,6 +5,7 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import serialx
@@ -30,6 +31,12 @@ class CommandTests(unittest.IsolatedAsyncioTestCase):
         self.send = self.exchange.start()
         self.send.return_value = b"OK"
         self.addCleanup(self.exchange.stop)
+        self.port_enumeration = patch(
+            "ctserial.common.async_list_serial_ports", new_callable=AsyncMock
+        )
+        self.ports = self.port_enumeration.start()
+        self.ports.return_value = []
+        self.addCleanup(self.port_enumeration.stop)
         self.addAsyncCleanup(self.app.on_stop)
 
     async def test_hex_representations_use_ctui_conversion(self):
@@ -274,7 +281,51 @@ class CommandTests(unittest.IsolatedAsyncioTestCase):
         self.session.close.assert_awaited_once()
         self.assertIsNone(self.app.session)
 
-    async def test_connect_uses_native_async_api_without_enumeration(self):
+    async def test_connect_suggestions_show_native_paths_and_reported_names(self):
+        self.ports.return_value = [
+            SimpleNamespace(
+                device="/dev/serial/by-id/usb-example",
+                resolved_device="/dev/ttyACM0",
+                manufacturer=" ExampleMaker  ",
+                product="Virtual COM Port",
+            ),
+            SimpleNamespace(
+                device="COM2",
+                resolved_device="COM2",
+                manufacturer=None,
+                product="USB Serial",
+            ),
+            SimpleNamespace(
+                device="COM1",
+                resolved_device="COM1",
+                manufacturer=" ",
+                product=None,
+            ),
+        ]
+        command, _ = self.app.commands.resolve("connect")
+        suggestions = await command.complete("", "", self.app)
+        self.assertEqual(
+            [(item.value, item.help) for item in suggestions],
+            [
+                ("/dev/ttyACM0", "ExampleMaker | Virtual COM Port"),
+                ("COM1", "Serial device"),
+                ("COM2", "USB Serial"),
+            ],
+        )
+        filtered = await command.complete("", "/dev/ttyA", self.app)
+        self.assertEqual([item.value for item in filtered], ["/dev/ttyACM0"])
+
+    async def test_enumeration_failure_still_allows_manual_connect(self):
+        self.ports.side_effect = OSError("enumeration unavailable")
+        self.app.session = None
+        with patch(
+            "ctserial.commands.serialx.async_serial_for_url", return_value=self.session
+        ) as factory:
+            await self.app.dispatch("connect /dev/manual")
+        factory.assert_called_once()
+        self.assertEqual(factory.call_args.args[0], "/dev/manual")
+
+    async def test_connect_opens_manual_path_not_in_suggestions(self):
         self.app.session = None
         with patch(
             "ctserial.commands.serialx.async_serial_for_url", return_value=self.session

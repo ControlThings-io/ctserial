@@ -16,8 +16,38 @@ import math
 import unicodedata
 from textwrap import wrap
 
-from serialx import AsyncSerial, async_list_serial_ports
+from ctui import CompletionContext, CompletionItem
+from serialx import AsyncSerial, SerialException, async_list_serial_ports
 from tabulate import tabulate
+
+
+async def serial_device_suggestions(
+    _context: CompletionContext,
+) -> list[CompletionItem]:
+    """Suggest current native port paths with device-reported name details.
+
+    Enumerate asynchronously without opening ports. Prefer resolved native
+    paths, such as /dev/ttyACM0, over serialx's stable symlinks. Trim
+    descriptor padding and omit missing fields; no USB database names or IDs
+    are used. Deduplicate paths and sort suggestions by path.
+
+    Return no suggestions on enumeration failure so manually entered paths and
+    URLs remain usable, including during ctui's dispatch-time prefix expansion.
+    """
+    try:
+        devices = await async_list_serial_ports()
+    except (OSError, SerialException):
+        return []
+    suggestions = {}
+    for device in devices:
+        path = device.resolved_device or device.device
+        details = " | ".join(
+            replace_control_characters(value.strip())
+            for value in (device.manufacturer, device.product)
+            if value and value.strip()
+        )
+        suggestions.setdefault(path, CompletionItem(path, details or "Serial device"))
+    return [suggestions[path] for path in sorted(suggestions)]
 
 
 async def list_serial_devices() -> str:

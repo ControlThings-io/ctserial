@@ -1,5 +1,7 @@
 # v0.6.0 (unreleased)
 
+* Suggest available serial device paths for `connect`, with device-reported
+  manufacturer and product names in completion details.
 * Keep each sent/received payload on one line, preserving four-byte hex groups
   and displaying only the UTF-8 decode.
 * Display fuzz sends, responses, and errors as each exchange happens in the UI

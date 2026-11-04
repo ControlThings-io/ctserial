@@ -70,3 +70,16 @@ Replace invalid UTF-8, Unicode controls, and line/paragraph separators with the
 replacement character so binary payloads cannot split the decoded cell into
 multiple lines. The UI continues to allow horizontal scrolling of long rows.
 This applies to both send commands and both streaming fuzz commands.
+
+## D8 — Device-reported names in connect suggestions (accepted)
+
+The user chose native port paths with `Manufacturer | Product` details, using
+device-reported descriptors rather than USB vendor/product database names or
+numeric IDs. Use serialx's asynchronous enumeration and resolved native paths
+so Linux suggestions show names such as `/dev/ttyACM0` rather than stable
+symlinks. Trim descriptor padding, omit unavailable fields, and show
+`Serial device` when neither name is available. Sort and deduplicate port paths.
+
+Completion is advisory: callers can still enter custom paths or serialx URLs.
+On enumeration failure, return no device candidates so manual connections remain
+usable even when ctui invokes completion for dispatch-time prefix expansion.

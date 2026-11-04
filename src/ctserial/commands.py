@@ -96,7 +96,10 @@ class CtserialApp(CtuiApp):
 
     @command(
         arguments={
-            "device": Argument(help="Serial device path, COM port, or serialx URL"),
+            "device": Argument(
+                help="Serial device path, COM port, or serialx URL",
+                completer=common.serial_device_suggestions,
+            ),
             "baudrate": Argument(
                 help="Baud rate (default: 9600)", validator=lambda value: value > 0
             ),

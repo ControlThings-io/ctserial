@@ -43,6 +43,15 @@ ctserial> exit
 Use a device path, symlink, Windows COM port, or a serialx URL. Paths are opened
 directly, including virtual ports omitted from `devices`.
 
+After `connect `, device suggestions show available native port paths, with the
+device-reported manufacturer and product in the details column. For example:
+
+```text
+/dev/ttyACM0    VelocioNetworks | Virtual COM Port
+```
+
+You can also type a path or serialx URL directly if it is absent from suggestions.
+
 `send hex` uses ctui's `HexBytes` conversion. It accepts contiguous hexadecimal,
 byte separators, `0x` prefixes, and `\xNN` notation. Quote values containing spaces
 or backslashes, for example `send hex '\xde\xad'`.
